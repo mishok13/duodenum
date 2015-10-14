@@ -1,13 +1,14 @@
-(ns mishok13.me.duodendum.parser)
+(ns mishok13.me.duodenum.parser
+  (:require [clojure.string :as str]))
 
 (defn- token-kind
   "Given the state and token determine the kind of the token"
   [state token]
-  )
+  :argument)
 
 (defn advance
-  [parser state]
-  (if-let [unprocessed (seq (:unprocessed state))]
+  [state]
+  (if-let [tokens (seq (:tokens state))]
     ;; XXX: This needs to switch context on certain conditions, and on
     ;; certain not so much. I wonder how to handle this without
     ;; creating a multi-page function?
@@ -23,27 +24,59 @@
     ;; XXX: edge case -ab where a is collector and b is boolean
     ;;
     ;;
-    (let [token (first unprocessed)
-          state (assoc state :unprocessed (rest unprocessed))]
-      (comment
-        (case (token-kind state token)
-          ;; there are N types of entry:
-          ;; * "abcdef"
-          :argument (depends on context)
-          :option-value (baz)
-          ;; * "-a"
-          :short-option (check if exists, switch context)
-          :unknown-short-option
-          (-> state
-              (update :))
-          ;; * "-abc"
-          :multiple-short-options (bar)
-          :short-option-with-value
-          (foo)
-          ;; * "--foo"
-          :long-option (long option?) (switch the context)
-          ;; * "--foo=bar"
-          :long-option-with-value (split-em-and-put-em-back)
-          ;; * "--"
-          :terminator (switch the context))))
-    (assoc state :done? true)))
+    (let [token (first tokens)
+          tokens (rest tokens)
+          state (assoc state :tokens tokens)]
+      (case (token-kind state token)
+        ;; there are N types of entry:
+        ;; * "abcdef"
+        :argument
+        (let [argument (get-in state [:context :argument])
+              current-value (get-in state [:processed :arguments (:name argument)])]
+          (cond
+            ;; When the value is nil we'd like to
+            (and (nil? current-value) (= 1 (:count argument)))
+            ;; Need to switch context to next argument!
+            (-> state
+                (assoc-in [:processed :arguments (:name argument)] token)
+                (assoc :context {:processing :done})))
+          ;; Need to update the context if argument has reached its count
+          ;; (update-in state [:processed :arguments] conj {:argument argument :value token})
+          )
+
+        :option-value
+        (let [option (:option (:context state))]
+          (update state :options conj {:option option :value token}))
+
+        ;; Token is "-a"
+        :short-option
+        (update state :context {:processing :option :option token})
+
+        :unknown-short-option
+        ;; We don't have to switch context here since the option has
+        ;; been bogus
+        (update state :errors conj {:kind :unknown-short-option :token token})
+
+        ;; Token is "-abc"
+
+        ;; "-abc" consists of 3 valid boolean options, we have to
+        ;; process this token as if it was three separate tokens:
+        ;; "-a", "-b", "-c"
+        :multiple-short-options
+        (assoc state :tokens (vec (concat (->> token rest (map str)) tokens)))
+
+        :short-option-with-value
+        (assoc state :tokens (vec (concat [(subs token 0 2) (subs token 2)] tokens)))
+        ;; * "--foo"
+        :long-option
+        ;; FIXME: need to get the name of the option by token
+        (assoc state :context {:option token :processing :option})
+        ;; * "--foo=bar"
+        :long-option-with-value
+        (assoc state :tokens (vec (concat (str/split token #"=" 2) tokens)))
+        ;; * "--"
+        :terminator
+        ;; FIXME: Which argument is it processing?
+        (assoc state :context {:argument nil :processing :argument})
+        (throw (ex-info "what" {:token token :state state}))))
+    (assoc state :context {:processing :done})))

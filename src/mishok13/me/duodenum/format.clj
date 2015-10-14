@@ -1,4 +1,4 @@
-(ns mishok13.me.duodendum.format)
+(ns mishok13.me.duodenum.format)
 
 (defn usage
   [parser]

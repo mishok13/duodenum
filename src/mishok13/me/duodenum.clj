@@ -1,4 +1,5 @@
-(ns mishok13.me.duodenum)
+(ns mishok13.me.duodenum
+  (:require [mishok13.me.duodenum.parser :as parser]))
 
 (defn parser
   [& opts]
@@ -17,23 +18,21 @@
   [parser args]
   (let [type (cond
                (and (:arguments parser) (:options parser)) :mixed
-               (:arguments parser) :arguments
-               (:options parser) :options)
-        context (when (= type :arguments)
-                  (:name (first (:arguments parser))))]
+               (:arguments parser) :argument
+               (:options parser) :option)]
     {;; Not-yet processed arguments
-     :unprocessed (seq args)
-     ;; Everything that matches goes here.
-     :processed []
+     :tokens (seq args)
      ;; Context should tell which argument or option we're collecting
      ;; for. For mixed content we have no context, thus we need to
      ;; make some additional work. For option only content the context
      ;; may be nil or current option being collected. For argument
      ;; content we need to have the argument name or else all unparsed
      ;; go to :unrecognized key
-     :context context
+     :context (cond-> {:processing type}
+                (= type :argument) (assoc :argument (first (:arguments parser))))
      ;; Processed but not understood
-     :unrecognized []
+     :errors []
+     :processed {}
      :arguments (->> (:arguments parser)
                      (map (fn [arg] [(:name arg) {:count (:count arg)
                                                   :name (:name arg)
@@ -45,10 +44,7 @@
                                                 :short-opt (:short-opt opt)
                                                 :long-opt (:long-opt opt)
                                                 :values []}]))
-                   (into {}))
-     ;; Type denotes whether we're parsing options or
-     ;; arguments currently
-     :type type}))
+                   (into {}))}))
 
 (defn- terminator?
   "Determine whether the provided token is a terminator string \"--\""
@@ -107,82 +103,24 @@
   [state token]
   (or (= :arguments (:context state)) (not (.startsWith token "-"))))
 
-(defn- advance
-  [parser state]
-  (if-let [unprocessed (seq (:unprocessed state))]
-    ;; XXX: This needs to switch context on certain conditions, and on
-    ;; certain not so much. I wonder how to handle this without
-    ;; creating a multi-page function?
-    ;;
-    ;; "-abc" -> "-a -b -c" in case all of these are options. If -a
-    ;; takes argument, then identical to -a bc. Otherwise -- unknown?
-    ;;
-    ;; --foo=bar is identical to --foo bar
-    ;;
-    ;; -fbar identical to -f bar
-    ;;
-    ;; XXX: wtf happens if option is specified twice?
-    ;;
-    (let [current (first unprocessed)
-          state (assoc state :unprocessed (rest unprocessed))]
-      (comment
-        (cond
-          ;; there are N types of entry:
-          ;; * "abcdef"
-          (arg?) (depends on context)
-          ;; * "-a"
-          (short-opt?) (check if exists, switch context)
-          ;; * "-abc"
-          (many-short-opts?) (split-em, if they are all valid boolean options put em back "-a", "-b", "-c", otherwise put "-a" + "bc" back in)
-          ;; * "--foo"
-          (long option?) (switch the context)
-          ;; * "--foo=bar"
-          (long-option-with-arg?) (split-em-and-put-em-back)
-          ;; * "--"
-          (terminator?) (switch the context)
-          ))
-      (cond
-        ;; We switch to argument-only processing here.
-        (and (= :mixed (:type state)) (= "--" current))
-        (assoc state :type :arguments)
-
-        ;; For empty context arguments
-        (and (= :arguments (:type state)) (nil? (:context state)))
-        (update state :unrecognized conj current)
-
-        ;; We have context, let's assign the value and update context
-        (= :arguments (:type state))
-        (let [name (:context state)
-              current-arg-value (get-in state [:arguments name])
-              updated-arg-value (update current-arg-value :values conj current)]
-          (if (= (:count updated-arg-value) (count (:values updated-arg-value)))
-            (-> state
-                (assoc :context nil)
-                (assoc-in [:arguments name] updated-arg-value))
-            (assoc-in state [:arguments name] updated-arg-value)))))
-
-    (assoc state :done? true)))
-
 (defn- scalar?
   [arg]
   (= 1 (:count arg)))
 
 (defn- render-result
   [parser state]
-  {:arguments (->> parser
-                   :arguments
-                   (map (fn [arg]
-                          (let [values (:values (get (:arguments state) (:name arg)))]
-                            (cond
-                              (and (= (count values) (:count arg)) (scalar? arg))
-                              [(:name arg) (first values)]
-
-                              (and (= (count values) (:count arg)) (not (scalar? arg)))
-                              [(:name arg) values]))))
-                   (into {})
-                   not-empty)
+  {:arguments (->> (:arguments parser)
+                   (filter (fn [{:keys [kind]}] (= kind :argument)))
+                   (map :name)
+                   (map (fn [name] [name (get-in state [:processed :arguments name])]))
+                   (into {}))
    :options nil
-   :unparsed (seq (:unrecognized state))})
+   :unparsed (seq (:tokens state))
+   :errors (seq (concat (:errors state)
+                        (->> (:arguments parser)
+                             (filter (fn [{:keys [kind]}] (= kind :argument)))
+                             (filter (fn [{:keys [name]}] (not (contains? (get-in state [:processed :arguments]) name))))
+                             (map (fn [{:keys [name]}] {:argument name :kind :not-enough-arguments})))))})
 
 (defn parse
   "Given a parser and list of arguments, parse them"
@@ -190,9 +128,9 @@
   ;; Pre-parsing stage, where we split things into
   (when parser
     (loop [state (initial parser args)]
-      (if (:done? state)
+      (if (= :done (get-in state [:context :processing]))
         (render-result parser state)
-        (recur (advance parser state))))))
+        (recur (parser/advance state))))))
 
 (defn group [])
 (defn command
