@@ -4,7 +4,43 @@
 (defn- token-kind
   "Given the state and token determine the kind of the token"
   [state token]
-  :argument)
+  (cond
+    (= :done (get-in state [:context :processing]))
+    :rest
+
+    (empty? (:context state))
+    :empty-context
+
+    :else
+    :argument))
+
+(defn init
+  [parser args]
+  (let [type (cond
+               (and (:arguments parser) (:options parser)) :mixed
+               (:arguments parser) :argument
+               (:options parser) :option)]
+    {;; Not-yet processed arguments
+     :tokens (seq args)
+     ;; Context should tell which argument or option we're collecting
+     ;; for. For mixed content we have no context, thus we need to
+     ;; make some additional work. For option only content the context
+     ;; may be nil or current option being collected. For argument
+     ;; content we need to have the argument name or else all unparsed
+     ;; go to :unrecognized key
+     :context nil
+     ;; Processed but not understood
+     :errors []
+     :processed {}
+     :arguments (->> (:arguments parser)
+                     (map (fn [arg] {:count (:count arg) :name (:name arg)})))
+     :options (->> (:options parser)
+                   (map (fn [opt] [(:name opt) {:count (:count opt)
+                                                :name (:name opt)
+                                                :short-opt (:short-opt opt)
+                                                :long-opt (:long-opt opt)
+                                                :values []}]))
+                   (into {}))}))
 
 (defn advance
   [state]
@@ -28,6 +64,19 @@
           tokens (rest tokens)
           state (assoc state :tokens tokens)]
       (case (token-kind state token)
+        :empty-context
+        (cond
+          (and (empty? (:options state)) (not (empty? (:arguments state))))
+          (-> state
+              (update :tokens conj token)
+              (assoc :context {:processing :argument :argument (first (:arguments state))})
+              (update :arguments rest)))
+        :rest
+        (-> state
+            ;; The token has not been processed, put it back in tokens list
+            (update :tokens conj token)
+            ;; Set the processing to done
+            (assoc :context {:processing :done}))
         ;; there are N types of entry:
         ;; * "abcdef"
         :argument
@@ -38,11 +87,29 @@
             (and (nil? current-value) (= 1 (:count argument)))
             ;; Need to switch context to next argument!
             (-> state
+                ;; Set to token to processed argument
                 (assoc-in [:processed :arguments (:name argument)] token)
-                (assoc :context {:processing :done})))
-          ;; Need to update the context if argument has reached its count
-          ;; (update-in state [:processed :arguments] conj {:argument argument :value token})
-          )
+                ;; advance arguments; wonder if we need to handle
+                ;; possible option popping up here?
+                (assoc :context (if-let [argument (first (:arguments state))]
+                                  {:processing :argument
+                                   :argument argument}
+                                  {:processing :done}))
+                (update :arguments rest))
+
+            (and (nil? current-value) (< 1 (:count argument)))
+            ;; Append token to processed argument
+            (assoc-in state [:processed :arguments (:name argument)] [token])
+
+            (and (< (inc (count current-value)) (:count argument)))
+            (update-in state [:processed :arguments (:name argument)] conj token)
+
+            (and (= (inc (count current-value)) (:count argument)))
+            (-> state
+                ;; Append token to processed argument
+                (update-in [:processed :arguments (:name argument)] conj token)
+                ;; advance arguments
+                (update :arguments rest))))
 
         :option-value
         (let [option (:option (:context state))]

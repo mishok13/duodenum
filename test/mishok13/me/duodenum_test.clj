@@ -19,6 +19,14 @@
  (d/parse (d/parser (d/argument "foo" :count 1)) ["42" "27"]) => (contains {:arguments {"foo" "42"} :unparsed ["27"]})
  (d/parse (d/parser (d/argument "foo" :count 1)) []) => (contains {:arguments {"foo" nil} :unparsed nil :errors [{:argument "foo" :kind :not-enough-arguments}]}))
 
+(fact
+ "Parsing multiple arguments works correctly"
+ (d/parse (d/parser (d/argument "foo") (d/argument "bar")) []) => (contains {:arguments {"foo" nil "bar" nil} :errors [{:argument "foo", :kind :not-enough-arguments} {:argument "bar", :kind :not-enough-arguments}]})
+ (d/parse (d/parser (d/argument "foo") (d/argument "bar")) ["42"]) => (contains {:arguments {"foo" "42" "bar" nil} :errors [{:argument "bar", :kind :not-enough-arguments}]})
+ (d/parse (d/parser (d/argument "foo") (d/argument "bar")) ["42" "43"]) => (contains {:arguments {"foo" "42" "bar" "43"} :errors nil :unparsed nil})
+ (d/parse (d/parser (d/argument "foo") (d/argument "bar")) ["42" "43" "44"]) => (contains {:arguments {"foo" "42" "bar" "43"} :errors nil :unparsed ["44"]})
+ (d/parse (d/parser (d/argument "foo") (d/argument "bar" :count 2)) ["42" "43" "44"]) => (contains {:arguments {"foo" "42" "bar" ["43" "44"]} :errors nil :unparsed nil}))
+
 ;; (fact
 ;;  "Simple option parsing works correctly"
 ;;  (d/parse (d/parser (d/option "foo" :short "-f")) []) => {:arguments nil :options {"foo" false}}
