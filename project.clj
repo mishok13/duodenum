@@ -1,4 +1,4 @@
-(defproject mishok13.me/duodenum "0.1.0-SNAPSHOT"
+(defproject me.mishok13/duodenum "0.1.0-SNAPSHOT"
   :description "Duodendum: A parser for command line arguments"
   :url "http://github.com/mishok13/duodemdum"
   :license {:name "MIT"
