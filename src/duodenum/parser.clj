@@ -1,7 +1,7 @@
-(ns mishok13.me.duodenum.parser
+(ns duodenum.parser
   (:require [clojure.string :as str]))
 
-(defn- token-kind
+(defn token-kind
   "Given the state and token determine the kind of the token"
   [state token]
   (cond
@@ -10,6 +10,14 @@
 
     (empty? (:context state))
     :empty-context
+
+    ;; Need to verify that we're not processing arguments here, I suppose
+    (and (re-matches #"-\p{Alnum}" token)
+         (->> state :options (map :short) (some #{token})))
+    :short-option
+
+    (re-matches #"-\p{Alnum}" token)
+    :unknown-short-option
 
     :else
     :argument))
@@ -66,11 +74,24 @@
       (case (token-kind state token)
         :empty-context
         (cond
-          (and (empty? (:options state)) (not (empty? (:arguments state))))
+          (and (empty? (:options state))
+               (not (empty? (:arguments state))))
           (-> state
               (update :tokens conj token)
               (assoc :context {:processing :argument :argument (first (:arguments state))})
-              (update :arguments rest)))
+              (update :arguments rest))
+
+          (and (empty? (:options state))
+               (empty? (:arguments state)))
+          (-> state
+              (update :tokens conj token)
+              (assoc :context {:processing :done}))
+
+          (and (not (empty? (:options state)))
+               (empty? (:arguments state)))
+          (-> state
+              (assoc :context {:processing :unknown})
+              (update :tokens conj token)))
         :rest
         (-> state
             ;; The token has not been processed, put it back in tokens list
@@ -117,8 +138,11 @@
 
         ;; Token is "-a"
         :short-option
-        (update state :context {:processing :option :option token})
+        (do
+          (prn "yes!")
+          (update state :context {:processing :option :option token}))
 
+        ;; Token is "-a" but we don't have similar token anywhere else
         :unknown-short-option
         ;; We don't have to switch context here since the option has
         ;; been bogus

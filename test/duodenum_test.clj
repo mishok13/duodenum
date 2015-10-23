@@ -1,6 +1,6 @@
-(ns mishok13.me.duodenum-test
+(ns duodenum-test
   (:require [midje.sweet :refer [fact tabular contains]]
-            [mishok13.me.duodenum :as d]))
+            [duodenum :as d]))
 
 (fact
  "Empty parser does nothing"
@@ -26,6 +26,11 @@
  (d/parse (d/parser (d/argument "foo") (d/argument "bar")) ["42" "43"]) => (contains {:arguments {"foo" "42" "bar" "43"} :errors nil :unparsed nil})
  (d/parse (d/parser (d/argument "foo") (d/argument "bar")) ["42" "43" "44"]) => (contains {:arguments {"foo" "42" "bar" "43"} :errors nil :unparsed ["44"]})
  (d/parse (d/parser (d/argument "foo") (d/argument "bar" :count 2)) ["42" "43" "44"]) => (contains {:arguments {"foo" "42" "bar" ["43" "44"]} :errors nil :unparsed nil}))
+
+(fact
+ "Parser with single boolean option (flag) works fine"
+ (d/parse (d/parser (d/option "foo" :short "-f")) []) => {:options {"foo" false}}
+ (d/parse (d/parser (d/option "foo" :short "-f")) ["-f"]) => {:options {"foo" true}})
 
 ;; (fact
 ;;  "Simple option parsing works correctly"

@@ -1,5 +1,5 @@
-(ns mishok13.me.duodenum
-  (:require [mishok13.me.duodenum.parser :as parser]))
+(ns duodenum
+  (:require [duodenum.parser :as parser]))
 
 (defn parser
   [& opts]
