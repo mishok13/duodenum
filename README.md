@@ -1,12 +1,6 @@
 # duodenum
 
-A Clojure library for parsing CLI arguments.
-
-## Usage
-
-```
-(def parser (duodendum/make-parser))
-```
+Clojure library for parsing command-line options. Still in early phases of development.
 
 ## License
 
