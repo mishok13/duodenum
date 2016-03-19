@@ -5,16 +5,25 @@
 (let [parser (d/parser)]
   (fact
    "Empty parser does nothing"
-   (d/parse parser []) => {:arguments [] :unparsed [] :options []}
-   (d/parse parser nil) => {:arguments [] :unparsed [] :options []}
-   (d/parse parser ["foo" "bar"]) => {:arguments [] :unparsed ["foo" "bar"] :options []}
-   (d/parse parser ["--opt=foo" "bar"]) => {:arguments [] :unparsed ["--opt=foo" "bar"] :options []})
+   (d/parse parser []) => {:arguments {} :unparsed [] :options []}
+   (d/parse parser nil) => {:arguments {} :unparsed [] :options []}
+   (d/parse parser ["foo" "bar"]) => {:arguments {} :unparsed ["foo" "bar"] :options []}
+   (d/parse parser ["--opt=foo" "bar"]) => {:arguments {} :unparsed ["--opt=foo" "bar"] :options []})
   (fact "Empty parser will "))
 
 (fact
  "Sanity checks pass"
  (d/parse nil []) => nil
  (d/parse (d/parser) [123]) => nil)
+
+(let [parser (d/parser {:type :argument :collect :* :key :foo})]
+  (tabular
+   (fact
+    "Argument-only parser groups works correctly"
+    (d/parse parser ?args) => {:arguments ?result :options [] :unparsed []})
+   ?args ?result
+   [] {:foo []}
+   ["42" "27"] {:foo ["42" "27"]}))
 
 (future-fact
  "Simple argument based parsing works correctly"
