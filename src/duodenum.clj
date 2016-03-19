@@ -9,4 +9,4 @@
   (when (and parser (map? parser) (every? string? args))
     {:arguments []
      :options []
-     :unparsed args}))
+     :unparsed (vec args)}))
