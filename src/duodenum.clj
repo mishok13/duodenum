@@ -5,4 +5,7 @@
 
 (defn parse
   [parser args]
-  (when (and parser (map? parser) (every? string? args))))
+  (when (and parser (map? parser) (every? string? args))
+    {:arguments []
+     :options []
+     :unparsed args}))
