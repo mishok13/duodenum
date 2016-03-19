@@ -1,7 +1,8 @@
 (ns duodenum)
 
 (defn parser
-  [& opts])
+  [& opts]
+  {})
 
 (defn parse
   [parser args]
